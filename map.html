@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FGV Tower Map</title>
+
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css">
+
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css">
+
+<style>
+
+html,body{
+    margin:0;
+    height:100%;
+    font-family:Segoe UI,sans-serif;
+}
+
+#map{
+    height:100vh;
+    width:100%;
+}
+
+.toolbar{
+    position:absolute;
+    top:0;
+    left:0;
+    z-index:1000;
+    background:#fff;
+    padding:12px;
+    border-radius:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+    width:280px;
+    transform:translateX(-100%);
+    transition:transform .25s ease;
+}
+
+.toolbar-wrap{
+    position:absolute;
+    top:10px;
+    left:0;
+    z-index:1000;
+}
+
+.toolbar-handle{
+    position:absolute;
+    top:0;
+    left:0;
+    width:42px;
+    height:42px;
+    background:#fff;
+    border-radius:0 10px 10px 0;
+    box-shadow:0 2px 10px rgba(0,0,0,.15);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:19px;
+    cursor:pointer;
+}
+
+.toolbar-wrap:hover .toolbar,
+.toolbar-wrap.open .toolbar{
+    transform:translateX(0);
+}
+
+.toolbar h3{
+    margin:0 0 10px;
+}
+
+.toolbar input,
+.toolbar select{
+    width:100%;
+    margin-bottom:8px;
+    padding:8px;
+    border:1px solid #ddd;
+    border-radius:8px;
+}
+
+.stats{
+    font-size:12px;
+    color:#666;
+}
+
+</style>
+
+
+<style id="executive-map-upgrade">
+.toolbar-handle{
+background:rgba(10,10,12,.95)!important;
+border:1px solid rgba(212,175,55,.35);
+border-left:none;
+color:#f2cf66!important;
+box-shadow:0 8px 20px rgba(0,0,0,.4)!important;
+}
+.toolbar{
+background:rgba(10,10,12,.95)!important;
+backdrop-filter:blur(12px);
+border:1px solid rgba(212,175,55,.25);
+width:320px!important;
+color:#fff;
+box-shadow:0 15px 40px rgba(0,0,0,.45)!important;
+}
+.toolbar h3{
+color:#fff!important;
+font-size:34px;
+margin-bottom:12px!important;
+}
+.toolbar h3:after{
+content:'';
+display:block;
+width:80px;
+height:4px;
+margin-top:10px;
+border-radius:10px;
+background:linear-gradient(90deg,#f2cf66,#b8871d);
+}
+.toolbar input,.toolbar select{
+background:#141414!important;
+color:#fff!important;
+border:1px solid rgba(212,175,55,.25)!important;
+padding:12px!important;
+}
+.exec-kpi{
+display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px;
+}
+.exec-kpi span{
+padding:8px 10px;border-radius:18px;font-weight:700;font-size:12px;color:#fff;
+}
+.kg{background:#16a34a}.ko{background:#f59e0b}.kr{background:#dc2626}
+.top-summary{
+position:absolute;top:12px;right:12px;z-index:1000;
+display:flex;gap:10px;
+}
+.top-summary div{
+background:rgba(10,10,12,.92);
+border:1px solid rgba(212,175,55,.25);
+color:#fff;padding:10px 14px;border-radius:12px;font-weight:700;
+}
+</style>
+
+
+<style id="black-gold-popup-cluster">
+/* Black Gold Popup */
+.leaflet-popup-content-wrapper{
+ background:#0f0f10!important;
+ color:#f5f5f5!important;
+ border:1px solid rgba(212,175,55,.35)!important;
+ border-radius:14px!important;
+ box-shadow:0 12px 35px rgba(0,0,0,.5)!important;
+}
+.leaflet-popup-tip{
+ background:#0f0f10!important;
+}
+.leaflet-popup-content h3{
+ color:#f2cf66!important;
+}
+
+/* Black Gold Cluster */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large{
+ background:transparent!important;
+}
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div{
+ background:linear-gradient(180deg,#1a1a1a,#0d0d0d)!important;
+ border:2px solid #d4af37!important;
+ color:#fff!important;
+ font-weight:700!important;
+ box-shadow:0 0 18px rgba(212,175,55,.35)!important;
+}
+
+.status-badge{
+display:inline-block;
+padding:6px 14px;
+border-radius:999px;
+font-weight:700;
+font-size:13px;
+letter-spacing:.5px;
+}
+.status-active{background:#16a34a;color:#fff;box-shadow:0 0 15px rgba(22,163,74,.35);}
+.status-soon{background:#f59e0b;color:#fff;box-shadow:0 0 15px rgba(245,158,11,.35);}
+.status-expired{background:#dc2626;color:#fff;box-shadow:0 0 15px rgba(220,38,38,.35);}
+.coord-card{
+background:rgba(255,255,255,.04);
+border:1px solid rgba(224,184,72,.25);
+border-radius:12px;
+padding:12px 14px;
+color:#8ec5ff;
+font-weight:600;
+margin-top:8px;
+}
+.gmaps-btn{
+display:block;
+width:100%;
+text-align:center;
+margin-top:16px;
+padding:14px;
+border-radius:12px;
+text-decoration:none;
+font-weight:700;
+color:#fff;
+background:linear-gradient(135deg,#8c6820,#d4af37);
+box-shadow:0 8px 20px rgba(212,175,55,.35);
+}
+.toolbar-btn{
+display:block;
+width:100%;
+text-align:center;
+padding:10px;
+border-radius:10px;
+border:1px solid rgba(212,175,55,.35);
+background:#1a1a1a;
+color:#f2e9d8;
+font-weight:700;
+font-size:12px;
+cursor:pointer;
+margin-bottom:8px;
+}
+.toolbar-btn:hover{background:#232323;border-color:#d4af37}
+.back-link{
+display:inline-flex;
+align-items:center;
+gap:6px;
+color:#f2cf66;
+text-decoration:none;
+font-size:12px;
+font-weight:700;
+margin-bottom:10px;
+cursor:pointer;
+}
+.back-link:hover{text-decoration:underline}
+.data-note{font-size:11px;color:#f59e0b;margin-top:4px}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="toolbar-wrap" id="toolbarWrap">
+<div class="toolbar-handle" id="toolbarHandle">🗺️</div>
+<div class="toolbar">
+
+<span class="back-link" id="backBtn">← Back to Dashboard</span>
+<h3>🗺️ Tower Map</h3>
+
+<input
+type="text"
+id="searchBox"
+placeholder="Search Site / Telco ID">
+
+<select id="statusFilter">
+<option value="">All Status</option>
+<option value="Active">Active</option>
+<option value="Soon">Soon</option>
+<option value="Expired">Expired</option>
+</select>
+<select id="companyFilter">
+<option value="">All Companies</option>
+</select>
+<select id="mapType">
+    <option value="street">🗺 Street Map</option>
+    <option value="satellite">🛰 Satellite</option>
+</select>
+
+<button type="button" class="toolbar-btn" id="refreshBtn">🔄 Refresh Data</button>
+
+<div class="exec-kpi">
+<span class="kg">🟢 Active</span>
+<span class="ko">🟠 Soon</span>
+<span class="kr">🔴 Expired</span>
+</div>
+<div class="stats" id="siteCount">
+Loading sites…
+</div>
+<div class="data-note" id="noCoordNote"></div>
+
+</div>
+</div>
+
+<div class="top-summary">
+<div>🗼 <span id='kpiTotal'>0</span></div>
+<div>🟢 <span id='kpiActive'>0</span></div>
+<div>🟠 <span id='kpiSoon'>0</span></div>
+<div>🔴 <span id='kpiExpired'>0</span></div>
+
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script>
+
+let towerData = [];
+try {
+  towerData = JSON.parse(localStorage.getItem('towerData') || '[]');
+  if(!Array.isArray(towerData)) towerData = [];
+} catch(e) {
+  console.warn('Could not read towerData from localStorage, starting empty:', e.message);
+  towerData = [];
+}
+
+console.log(
+ 'Loaded sites:',
+ towerData.length
+);
+
+</script>
+
+
+<script>
+
+const map=L.map('map').setView([3.5,102.5],7);
+
+const streetMap = L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+    maxZoom:19,
+    attribution:'© OpenStreetMap'
+}
+);
+
+const satelliteMap = L.tileLayer(
+'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+{
+    maxZoom:19,
+    attribution:'© Esri'
+}
+);
+
+streetMap.addTo(map);
+
+const clusterGroup = L.markerClusterGroup();
+
+map.addLayer(clusterGroup);
+
+let markers=[];
+
+function markerColor(status){
+
+ if(status==='Expired') return '#dc2626';
+
+ if(status==='Soon') return '#f59e0b';
+
+ return '#16a34a';
+
+}
+const companyFilter =
+document.getElementById('companyFilter');
+
+function populateCompanyFilter(){
+ const current = companyFilter.value;
+ companyFilter.innerHTML = '<option value="">All Companies</option>';
+ const companies=[
+  ...new Set(
+    towerData
+    .map(x=>x.company)
+    .filter(Boolean)
+  )
+ ].sort();
+ companies.forEach(c=>{
+  const opt=document.createElement('option');
+  opt.value=c;
+  opt.textContent=c;
+  companyFilter.appendChild(opt);
+ });
+ if(companies.includes(current)) companyFilter.value = current;
+}
+populateCompanyFilter();
+
+function updateCompanyKPIs(filtered){
+ const total = filtered.length;
+ const active = filtered.filter(x=>x.taStatus==='Active').length;
+ const soon = filtered.filter(x=>x.taStatus==='Soon').length;
+ const expired = filtered.filter(x=>x.taStatus==='Expired').length;
+
+ const rental = filtered.reduce((a,b)=>{
+   return a + Number(b.currentRental || 0);
+ },0);
+
+ const el1=document.getElementById('kpiTotal');
+ const el2=document.getElementById('kpiActive');
+ const el3=document.getElementById('kpiSoon');
+ const el4=document.getElementById('kpiExpired');
+
+ if(el1) el1.textContent=total;
+ if(el2) el2.textContent=active;
+ if(el3) el3.textContent=soon;
+ if(el4) el4.textContent=expired;
+}
+
+function drawMap(){
+
+ clusterGroup.clearLayers();
+
+markers=[];
+
+ const search=
+ document.getElementById('searchBox')
+ .value
+ .toLowerCase();
+
+ const status=
+ document.getElementById('statusFilter')
+ .value;
+const company=
+document.getElementById('companyFilter')
+.value;
+ let visible=[];
+ let filteredSites=[];
+ let noCoordCount=0;
+
+ towerData.forEach(x=>{
+
+   if(status && x.taStatus!==status) return; if(company && x.company!==company)
+return;
+
+   const keyword=
+   (
+      (x.project||'')+' '+
+      (x.site||'')+' '+
+      (x.telcoId||'')+' '+
+      (x.company||'')+' '+
+      (x.pic||'')+' '+
+      (x.state||'')+' '+
+      (x.district||'')+' '+
+      (x.mukim||'')
+   ).toLowerCase();
+
+   if(search && !keyword.includes(search))
+      return;
+const coord =
+String(x.coordinate || '')
+.split(',');
+
+if(coord.length!==2){
+noCoordCount++;
+return;
+}
+
+const lat =
+parseFloat(coord[0]);
+
+const lng =
+parseFloat(coord[1]);
+
+if(isNaN(lat)||isNaN(lng)){
+noCoordCount++;
+return;
+}
+
+
+   const marker=L.circleMarker(
+      [lat,lng],
+      {
+         radius:8,
+         color:markerColor(x.taStatus),
+         fillOpacity:0.85
+      }
+   );
+
+const dayColor =
+Number(x.daysToExpired) < 0 ? '#dc2626' :
+Number(x.daysToExpired) <= 180 ? '#f59e0b' :
+'#16a34a';
+
+   
+const statusClass =
+ (x.taStatus==='Active') ? 'status-active' :
+ (x.taStatus==='Soon') ? 'status-soon' : 'status-expired';
+const statusBadge = `<span class="status-badge ${statusClass}">${x.taStatus || '-'}</span>`;
+const location=[x.district,x.state,x.mukim].filter(Boolean).join(', ');
+
+marker.bindPopup(`
+<div style="min-width:280px">
+
+<h3 style="margin:0 0 10px 0;color:#f2cf66">
+📡 ${x.project}
+</h3>
+
+<hr style="border-color:rgba(212,175,55,.25)">
+
+<b>Telco ID</b><br>
+${x.telcoId || '-'}<br><br>
+
+<b>Company</b><br>
+${x.company || '-'}<br><br>
+
+<b>Location</b><br>
+${location || 'State/District/Mukim belum diisi'}<br><br>
+
+<b>TA Status</b><br>
+${statusBadge}<br><br>
+
+<b>Days To Expired</b><br>
+<span style="color:${dayColor};font-weight:bold">
+${x.daysToExpired || '-'} hari
+</span><br><br>
+
+<b>Rental End</b><br>
+${x.rentalEnd || '-'}<br><br>
+
+<b>Current Rental</b><br>
+RM ${Number(x.currentRental || 0).toLocaleString('en-MY',{
+  minimumFractionDigits:2,
+  maximumFractionDigits:2
+})}<br><br>
+
+<b>PIC</b><br>
+${x.pic || '-'}<br><br>
+
+<b>Coordinate</b><div class="coord-card">📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}</div><br>
+
+<a
+href="https://www.google.com/maps?q=${lat},${lng}"
+target="_blank"
+class="gmaps-btn"
+>
+🗺 Open Google Maps
+</a>
+
+</div>
+`);
+
+const days = Number(x.daysToExpired || 0);
+
+const dayText =
+days < 0
+? `🔴 Expired ${Math.abs(days)} hari lalu`
+: days <= 180
+? `🟡 ${days} hari lagi`
+: `🟢 ${days} hari lagi`;
+
+marker.bindTooltip(
+`
+<b>${x.project || '-'}</b><br>
+📡 ${x.telcoId || '-'}<br>
+🏢 ${x.company || '-'}<br>
+📍 ${x.district || '-'}, ${x.state || '-'}, ${x.mukim || '-'}<br>
+📄 ${x.taStatus || '-'}<br>
+${dayText}
+
+`,
+{
+    sticky:true,
+    direction:'top'
+}
+);
+
+clusterGroup.addLayer(marker);
+
+   markers.push(marker);
+
+   visible.push([lat,lng]);
+ filteredSites.push(x);
+
+ });
+
+ updateCompanyKPIs(filteredSites);
+  document.getElementById('siteCount')
+ .innerHTML=
+ `Showing ${markers.length} / ${towerData.length} Sites`;
+ const noCoordEl=document.getElementById('noCoordNote');
+ if(noCoordEl){
+   noCoordEl.textContent = noCoordCount>0
+     ? `⚠️ ${noCoordCount} site sepadan filter tapi tiada koordinat sah (tak muncul di peta)`
+     : '';
+ }
+
+ if(visible.length){
+    map.fitBounds(visible,{
+      padding:[40,40]
+    });
+ }
+
+}
+
+document.getElementById('toolbarHandle').onclick=function(){
+ document.getElementById('toolbarWrap').classList.toggle('open');
+};
+document.addEventListener('click',function(e){
+ const wrap=document.getElementById('toolbarWrap');
+ if(wrap.classList.contains('open') && !wrap.contains(e.target)){
+   wrap.classList.remove('open');
+ }
+});
+
+document.getElementById('backBtn').onclick=function(){
+ window.close();
+ setTimeout(function(){
+   if(window.history.length>1){ window.history.back(); }
+   else{ alert('Sila tutup tab ini untuk kembali ke Dashboard.'); }
+ },150);
+};
+
+document.getElementById('refreshBtn').onclick=function(){
+ try{
+   towerData = JSON.parse(localStorage.getItem('towerData') || '[]');
+   if(!Array.isArray(towerData)) towerData = [];
+ }catch(e){
+   console.warn('Could not refresh towerData:', e.message);
+   alert('Gagal muat data terkini. Sila cuba lagi.');
+   return;
+ }
+ populateCompanyFilter();
+ drawMap();
+};
+
+document.getElementById('searchBox')
+.addEventListener('input', drawMap);
+
+document.getElementById('statusFilter')
+.addEventListener('change', drawMap);
+
+document.getElementById('companyFilter')
+.addEventListener('change', drawMap);
+
+document.getElementById('mapType')
+.addEventListener('change', function(){
+
+    if(this.value === 'satellite'){
+        map.removeLayer(streetMap);
+        satelliteMap.addTo(map);
+    }else{
+        map.removeLayer(satelliteMap);
+        streetMap.addTo(map);
+    }
+
+});
+
+drawMap();
+
+</script>
+
+</body>
+</html>

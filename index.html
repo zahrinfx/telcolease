@@ -878,6 +878,189 @@ box-shadow:0 0 12px rgba(255,255,255,.18)!important;
 }
 
 </style>
+<style>
+#autoScaleControl{position:fixed;right:14px;bottom:14px;z-index:2147483647;display:flex;align-items:center;gap:2px;background:rgba(15,15,20,.82);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:5px 6px;font-family:Inter,Segoe UI,Arial,sans-serif;font-size:11px;color:#fff;box-shadow:0 8px 22px rgba(0,0,0,.3);user-select:none}
+#autoScaleControl button{all:unset;cursor:pointer;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:800;font-size:14px;background:rgba(255,255,255,.12);line-height:1}
+#autoScaleControl button:hover{background:rgba(255,255,255,.26)}
+#autoScaleControl button:active{background:rgba(255,255,255,.36)}
+#autoScaleControl .asc-label{min-width:42px;text-align:center;font-weight:700;opacity:.92;letter-spacing:.02em}
+#autoScaleControl .asc-reset{font-size:10px;opacity:.6;text-decoration:underline;cursor:pointer;margin-left:3px;padding:0 4px}
+#autoScaleControl .asc-reset:hover{opacity:1}
+</style>
+<script>
+/* ============================================================
+   AUTO VIEW SCALE — cross-browser + manual per-screen fine-tune
+   ------------------------------------------------------------
+   Keeps the dashboard's visual size/density roughly consistent
+   whether opened on a small laptop screen or a bigger external
+   monitor, then lets the user nudge it up/down with a small
+   +/- control (bottom-right corner). That manual nudge is saved
+   per PHYSICAL SCREEN (keyed by its resolution), so the laptop
+   screen and an external monitor each remember their own
+   preferred size independently — adjusting it on the monitor
+   does not change what the laptop screen shows, and vice versa.
+
+   AUTO PART: reads the physical screen resolution
+   (window.screen.width), not the browser window size, and maps
+   it to a scale factor relative to a comfortable "design width".
+   Physical screen size (not window.innerWidth) is used to avoid
+   a feedback loop, since window.innerWidth itself would change
+   once scaling is applied.
+
+   Two rendering engines, auto-picked by feature detection so it
+   works on every browser:
+     1) CSS `zoom` — Edge, Chrome, other Chromium browsers, and
+        modern Firefox/Safari (added support in 2024).
+     2) `transform: scale()` fallback — older Firefox/Safari,
+        Internet Explorer, or anything without `zoom` support.
+   ============================================================ */
+(function(){
+  var DESIGN_WIDTH      = 1536; // typical laptop width -> auto scale 100% here
+  var MIN_ZOOM           = 0.85;
+  var MAX_ZOOM           = 1.30;
+  var MOBILE_BREAKPOINT  = 820;  // keep in sync with the CSS mobile breakpoint
+  var STEP               = 0.05; // manual +/- increment
+  var ABS_MIN            = 0.6;
+  var ABS_MAX            = 1.6;
+
+  function supportsCSSZoom(){
+    try{
+      var t = document.createElement('div');
+      t.style.zoom = '1.5';
+      return !!t.style.zoom;
+    }catch(e){ return false; }
+  }
+  var useNativeZoom = supportsCSSZoom();
+  var wrapper = null; // only created if the transform fallback is needed
+
+  function physicalScreenWidth(){
+    return (window.screen && window.screen.width) ? window.screen.width : window.innerWidth;
+  }
+
+  // Manual override is stored per physical screen resolution, so a laptop
+  // panel and an external monitor (different resolutions) each keep their
+  // own remembered adjustment even though it's the same browser/profile.
+  function overrideKey(){
+    var s = window.screen || {};
+    return 'autoScaleOverride_' + (s.width||0) + 'x' + (s.height||0);
+  }
+  function getOverride(){
+    try{
+      var v = parseFloat(localStorage.getItem(overrideKey()));
+      return isNaN(v) ? 1 : v;
+    }catch(e){ return 1; }
+  }
+  function setOverride(v){
+    try{ localStorage.setItem(overrideKey(), v.toFixed(3)); }catch(e){}
+  }
+
+  function autoFactor(){
+    var f = physicalScreenWidth() / DESIGN_WIDTH;
+    if(f < MIN_ZOOM) f = MIN_ZOOM;
+    if(f > MAX_ZOOM) f = MAX_ZOOM;
+    return f;
+  }
+
+  function computeFactor(){
+    if(window.innerWidth <= MOBILE_BREAKPOINT) return 1; // don't touch mobile layout
+    var f = autoFactor() * getOverride();
+    if(f < ABS_MIN) f = ABS_MIN;
+    if(f > ABS_MAX) f = ABS_MAX;
+    return f;
+  }
+
+  function ensureWrapper(){
+    if(wrapper) return wrapper;
+    wrapper = document.createElement('div');
+    wrapper.id = 'autoScaleWrapper';
+    while(document.body.firstChild){ wrapper.appendChild(document.body.firstChild); }
+    document.body.appendChild(wrapper);
+    return wrapper;
+  }
+
+  function applyTransformScale(factor){
+    var w = ensureWrapper();
+    if(factor === 1){
+      w.style.transform = '';
+      w.style.width = '';
+      document.body.style.height = '';
+      return;
+    }
+    w.style.transformOrigin = 'top left';
+    w.style.width = (100 / factor) + '%';
+    w.style.transform = 'scale(' + factor + ')';
+    // Transforms don't affect document flow, so the page's scroll height
+    // has to be set manually to match the visually scaled content.
+    requestAnimationFrame(function(){
+      document.body.style.height = w.getBoundingClientRect().height + 'px';
+    });
+  }
+
+  function applyAutoScale(){
+    var factor = computeFactor();
+    if(useNativeZoom){
+      document.documentElement.style.zoom = factor.toFixed(3);
+    }else{
+      applyTransformScale(factor);
+    }
+    updateControlLabel(factor);
+  }
+
+  // ---- Manual +/- control (bottom-right) ----
+  var controlEl, labelEl;
+  function buildControl(){
+    if(controlEl || window.innerWidth <= MOBILE_BREAKPOINT) return;
+    controlEl = document.createElement('div');
+    controlEl.id = 'autoScaleControl';
+    controlEl.title = 'Laraskan saiz paparan untuk skrin ini';
+    controlEl.innerHTML =
+      '<button type="button" data-act="down" aria-label="Kecilkan">–</button>' +
+      '<span class="asc-label">100%</span>' +
+      '<button type="button" data-act="up" aria-label="Besarkan">+</button>' +
+      '<span class="asc-reset" data-act="reset">Reset</span>';
+    document.body.appendChild(controlEl);
+    labelEl = controlEl.querySelector('.asc-label');
+    controlEl.addEventListener('click', function(e){
+      var act = e.target.getAttribute('data-act');
+      if(!act) return;
+      var ov = getOverride();
+      if(act==='up') ov += STEP;
+      else if(act==='down') ov -= STEP;
+      else if(act==='reset') ov = 1;
+      if(ov < 0.5) ov = 0.5;
+      if(ov > 2)   ov = 2;
+      setOverride(ov);
+      applyAutoScale();
+    });
+  }
+  function updateControlLabel(factor){
+    if(!controlEl) buildControl();
+    if(labelEl) labelEl.textContent = Math.round(factor*100) + '%';
+  }
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(applyAutoScale, 150);
+  });
+  // Re-check when the window regains focus (covers dragging the browser
+  // window to a different monitor and switching back to it).
+  window.addEventListener('focus', applyAutoScale);
+
+  function init(){
+    buildControl();
+    applyAutoScale();
+    // Re-measure once more after fonts/images finish loading, since that
+    // can change the page's natural height (matters for the fallback path).
+    window.addEventListener('load', function(){ setTimeout(applyAutoScale, 200); });
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  }else{
+    init();
+  }
+})();
+</script>
 </head>
 <body>
 <div class="app">
@@ -909,7 +1092,7 @@ box-shadow:0 0 12px rgba(255,255,255,.18)!important;
   <button class="nav-btn quick" data-status="Expired"><span>●</span>Expired leases</button>
   <button class="nav-btn quick" data-status="Soon"><span>●</span>Renewal soon</button>
   <button class="nav-btn quick" data-status="Active"><span>●</span>Active leases</button>
-  <div class="side-foot"><strong>Excel-linked layout</strong>Full Table mirrors all 26 Excel columns from Bil through Remark. Use “Load Excel” to preview a newly edited workbook instantly.</div>
+  <div class="side-foot"><strong>Data Synchronization</strong>The Full Table reflects the complete master workbook structure. Upload a revised file via “Load Excel” to update all records instantly.<div id="liveClockNote" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.12);font-size:11px;opacity:.75"></div></div>
   <div class="source-note" id="sourceNote"></div>
 </aside>
 <main class="main">
@@ -1345,13 +1528,42 @@ $('#fileInput').addEventListener('change',async e=>{const f=e.target.files[0];if
     }let v=r[idx(h)]??'';if(['today','rentalStart','rentalEnd','completionDate','lsExpiredDate'].includes(k))v=xlsDate(v);o[k]=v});return o});recomputeLive(data);try{localStorage.setItem('towerData',JSON.stringify(data));}catch(e){console.warn('Could not save to localStorage:', e.message);}
 selectedId=data[0]?.bil??null;
 rebuildFilters();
-applyFilters();if($('#sourceNote'))$('#sourceNote').textContent=`Source: ${f.name} · ${wb.SheetNames[0]} · loaded in browser`;if($('#asOfNote'))$('#asOfNote').textContent=`Status live as of ${asOfLabel()}`;alert(`Excel loaded: ${data.length} site records.`)}catch(err){console.error(err);alert('Could not read this Excel file. Please keep the same Sheet1/header structure.')};e.target.value=''})
-recomputeLive(data);rebuildFilters();filtered=[...data];selectedId=filtered[0]?.bil??null;render();$('#asOfNote').textContent=`Status live as of ${asOfLabel()}`;
+applyFilters();if($('#sourceNote'))$('#sourceNote').textContent=`Source: ${f.name} · ${wb.SheetNames[0]} · loaded in browser`;setAsOfTimestamp();alert(`Excel loaded: ${data.length} site records.`)}catch(err){console.error(err);alert('Could not read this Excel file. Please keep the same Sheet1/header structure.')};e.target.value=''})
+recomputeLive(data);rebuildFilters();filtered=[...data];selectedId=filtered[0]?.bil??null;render();setAsOfTimestamp();
+
+/* Cloud sync: if a data.json file has been published alongside this page
+   (e.g. by a Power Automate flow reading the OneDrive Tracker.xlsx and
+   pushing to GitHub, which Netlify then redeploys), load it automatically.
+   Falls back silently if the file doesn't exist yet or the network/browser
+   blocks it (e.g. opening this file directly from disk) — the existing
+   embedded-data / localStorage / manual "Load Excel" flow is unaffected. */
+async function loadFromDataJson(){
+  try{
+    const res=await fetch('./data.json?t='+Date.now(),{cache:'no-store'});
+    if(!res.ok) return false;
+    const json=await res.json();
+    if(!Array.isArray(json) || json.length===0) return false;
+    if(JSON.stringify(json)===JSON.stringify(data)) return false;
+    data=json;
+    recomputeLive(data);
+    rebuildFilters();
+    applyFilters();
+    if(typeof updateDataQualityNote==='function') updateDataQualityNote();
+    setAsOfTimestamp();
+    if($('#sourceNote')) $('#sourceNote').textContent=`Source: data.json · synced from OneDrive via Power Automate`;
+    return true;
+  }catch(e){
+    console.warn('data.json not available yet (this is expected until the Power Automate sync is set up):', e.message);
+    return false;
+  }
+}
+loadFromDataJson();
 
 /* Auto-sync: every 30s, pick up any newer data saved to this browser
    (e.g. from another tab that loaded a fresh Excel file) and refresh
    live status (Active/Soon/Expired, days-to-expire) + the view. */
 setInterval(()=>{
+  loadFromDataJson();
   try{
     const saved=localStorage.getItem('towerData');
     if(saved){
@@ -1364,9 +1576,19 @@ setInterval(()=>{
   }catch(e){ console.warn('Auto-sync: could not read saved data:', e.message); }
   recomputeLive(data);
   applyFilters();
-  if($('#asOfNote')) $('#asOfNote').textContent=`Status live as of ${asOfLabel()}`;
+  setAsOfTimestamp();
   console.log(`[auto-sync] checked at ${new Date().toLocaleTimeString('en-GB')}`);
 },30000);
+
+/* Both "Status live as of ..." labels (topbar + sidebar Data Synchronization
+   box) always show the same value — the last time data was actually
+   checked/synced — updated together via setAsOfTimestamp() below. */
+function setAsOfTimestamp(){
+  const label=`Status live as of ${asOfLabel()}`;
+  if($('#asOfNote')) $('#asOfNote').textContent=label;
+  if($('#liveClockNote')) $('#liveClockNote').textContent=label;
+}
+setAsOfTimestamp();
 
 
 (function(){
